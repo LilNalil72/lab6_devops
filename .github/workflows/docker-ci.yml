@@ -50,4 +50,5 @@ jobs:
           context: ./postgres
           file: postgres/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/postgres:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/custom-postgres:latest
+
