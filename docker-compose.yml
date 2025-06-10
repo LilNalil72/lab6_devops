@@ -2,37 +2,51 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:15
+    image: lilnalil432/custom-postgres:latest
     container_name: lab5_postgres
     env_file: .env
-    volumes:
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
 
-  registratura:
-    build: ./registratura
-    container_name: registratura
+  migrate:
+    # используем официальный образ только для утилиты psql
+    image: postgres:15
+    container_name: lab6_devops_migrate
+    env_file: .env
     depends_on:
       - postgres
+    volumes:
+      - ./migrations:/migrations:ro
+    entrypoint: >
+      sh -c "
+        until pg_isready -h postgres -U \"${POSTGRES_USER}\"; do
+          echo 'Waiting for Postgres…'; sleep 1;
+        done;
+        for f in /migrations/*.sql; do
+          echo \"Applying $f...\"; 
+          psql -h postgres -U \"${POSTGRES_USER}\" -d \"${POSTGRES_DB}\" -f \"$f\";
+        done;
+      "
+
+  registratura:
+    image: lilnalil432/registratura:latest
+    container_name: registratura
     env_file: .env
+    depends_on:
+      - migrate
     ports:
       - "5001:5000"
 
   schedule:
-    build: ./schedule
+    image: ${DOCKERHUB_USERNAME}/schedule:latest
     container_name: schedule
-    depends_on:
-      - postgres
     env_file: .env
+    depends_on:
+      - migrate
     ports:
       - "5002:5000"
 
-  migrate:
-    image: yourhub/registratura:latest
-    depends_on:
-      - db
-    entrypoint: ["alembic", "upgrade", "head"]
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
+volumes:
+  pgdata:
