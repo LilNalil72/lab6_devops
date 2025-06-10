@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: lab5_postgres
+    env_file: .env
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+
+  registratura:
+    build: ./registratura
+    container_name: registratura
+    depends_on:
+      - postgres
+    env_file: .env
+    ports:
+      - "5001:5000"
+
+  schedule:
+    build: ./schedule
+    container_name: schedule
+    depends_on:
+      - postgres
+    env_file: .env
+    ports:
+      - "5002:5000"
