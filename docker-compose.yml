@@ -16,18 +16,22 @@ services:
       - postgres
     volumes:
       - ./migrations:/migrations:ro
-    # escape $ для Compose: пишем $$, чтобы в контейнере был один $
-    entrypoint:
-      - sh
-      - -c
-      - |
-        until pg_isready -h postgres -U "${POSTGRES_USER}"; do
-          echo 'Waiting for Postgres…' && sleep 1;
+    entrypoint: >
+      sh -c '
+        # экспортируем пароль для psql
+        export PGPASSWORD="$POSTGRES_PASSWORD";
+        until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$POSTGRES_USER"; do
+          echo "Waiting for Postgres…"; sleep 1;
         done;
         for f in /migrations/*.sql; do
-          echo "Applying $${f}…";
-          psql -h postgres -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -f "$${f}";
+          echo "Applying $f…";
+          psql -h "$DB_HOST" \
+               -p "$DB_PORT" \
+               -U "$POSTGRES_USER" \
+               -d "$POSTGRES_DB" \
+               -f "$f";
         done;
+      '
 
   registratura:
     image: lilnalil432/registratura:latest
