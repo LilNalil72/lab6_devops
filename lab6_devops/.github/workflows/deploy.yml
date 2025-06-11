@@ -1,0 +1,46 @@
+name: Build and Push to Docker Hub
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push app_registry
+        uses: docker/build-push-action@v4
+        with:
+          context: ./app_registry
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:${{ github.sha }}
+
+      - name: Build and push app_schedule
+        uses: docker/build-push-action@v4
+        with:
+          context: ./app_schedule
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:${{ github.sha }}
+
+      - name: Build and push db_migrations
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          dockerfile: ./db_migrations/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/hospital_db_migrations:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/hospital_db_migrations:${{ github.sha }}
