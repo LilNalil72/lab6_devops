@@ -1,0 +1,77 @@
+version: '3.8'
+
+volumes:
+  pg_data: 
+    driver: local
+    driver_opts:
+      type: none
+      device: ./db_data
+      o: bind
+
+services:
+  postgres:
+    image: postgres:14
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./db_migrations:/docker-entrypoint-initdb.d  # Монтируем миграции
+    environment:
+      POSTGRES_DB: hospital
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: securepass
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migration-runner:
+    image: postgres:14
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./db_migrations:/migrations
+    command: >
+      bash -c "for file in /migrations/V*.sql; do
+        version=$${file#*V}
+        version=$${version%%__*}
+        check=$$(PGPASSWORD=$$DB_PASSWORD psql -h postgres -U $$DB_USER -d $$DB_NAME -tAc 'SELECT 1 FROM schema_version WHERE version='$$version)
+        if [ -z \"$$check\" ]; then
+          echo 'Applying migration: $${file}';
+          PGPASSWORD=$$DB_PASSWORD psql -h postgres -U $$DB_USER -d $$DB_NAME -f $${file};
+        else
+          echo 'Migration V'$$version' already applied, skipping';
+        fi
+      done"
+    environment:
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: securepass
+
+  app_registry:
+    build: ./app_registry
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: securepass
+
+  app_schedule:
+    build: ./app_schedule
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: securepass
