@@ -1,43 +1,53 @@
-name: Docker Build and Push
+name: Build and Push Docker Images
 
 on:
-  workflow_dispatch:  # Разрешает ручной запуск
   push:
     branches: [notmain]  # Ваша ветка
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: notmain  # Явное указание ветки
 
-      - name: Setup Docker
-        id: docker
+      # Обязательные настройки сборки
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push Registry
-        uses: docker/build-push-action@v5
+      # Сборка и пуш сервиса Регистратура
+      - name: Build & Push Registry Service
+        uses: docker/build-push-action@v4
         with:
           context: ./app_registry
+          file: ./app_registry/Dockerfile  # Явное указание Dockerfile
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:${{ github.sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:latest
 
-      - name: Build and push Schedule
-        uses: docker/build-push-action@v5
+      # Сборка и пуш сервиса Расписание
+      - name: Build & Push Schedule Service
+        uses: docker/build-push-action@v4
         with:
           context: ./app_schedule
+          file: ./app_schedule/Dockerfile  # Явное указание Dockerfile
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:${{ github.sha }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:latest
+
+      # Сборка и пуш миграций БД (если нужно)
+      - name: Build & Push DB Migrations
+        uses: docker/build-push-action@v4
+        with:
+          context: ./db_migrations
+          file: ./db_migrations/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/db_migrations:latest
