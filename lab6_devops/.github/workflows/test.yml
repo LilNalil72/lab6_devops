@@ -1,0 +1,10 @@
+name: Test Workflow
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Action
+        run: echo "GitHub Actions are working! Date: $(date)"
