@@ -1,17 +1,14 @@
-name: Docker Build and Push
+name: Build and Push Docker Images
 
 on:
   push:
-    branches: [ "notmain" ]
-    
-env:
-  DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+    branches: [ notmain ]  # Ваша ветка
 
 jobs:
-  build-and-push:
+  build-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Login to Docker Hub
@@ -25,11 +22,18 @@ jobs:
         with:
           context: ./app_registry
           push: true
-          tags: ${{ env.DOCKERHUB_USER }}/app_registry:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:latest
 
       - name: Build and push Schedule
         uses: docker/build-push-action@v4
         with:
           context: ./app_schedule
           push: true
-          tags: ${{ env.DOCKERHUB_USER }}/app_schedule:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:latest
+
+      # Для отладки добавьте этот шаг
+      - name: Debug info
+        run: |
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Workflow: ${{ github.workflow }}"
