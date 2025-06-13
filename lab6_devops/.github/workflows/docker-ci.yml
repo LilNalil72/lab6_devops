@@ -10,7 +10,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       # Обязательные настройки сборки
       - name: Set up QEMU
@@ -29,8 +29,8 @@ jobs:
       - name: Build & Push Registry Service
         uses: docker/build-push-action@v4
         with:
-          context: ./app_registry
-          file: ./app_registry/Dockerfile  # Явное указание Dockerfile
+          context: lab6_devops/app_registry
+          file: lab6_devops/app_registry/Dockerfile  # Явное указание Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/app_registry:latest
 
@@ -38,8 +38,8 @@ jobs:
       - name: Build & Push Schedule Service
         uses: docker/build-push-action@v4
         with:
-          context: ./app_schedule
-          file: ./app_schedule/Dockerfile  # Явное указание Dockerfile
+          context: lab6_devops/app_schedule
+          file: lab6_devops/app_schedule/Dockerfile  # Явное указание Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/app_schedule:latest
 
@@ -47,7 +47,7 @@ jobs:
       - name: Build & Push DB Migrations
         uses: docker/build-push-action@v4
         with:
-          context: ./db_migrations
-          file: ./db_migrations/Dockerfile
+          context: lab6_devops/db_migrations
+          file: lab6_devops/db_migrations/Dockerfile
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/db_migrations:latest
