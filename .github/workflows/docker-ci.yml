@@ -62,32 +62,22 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Setup SSH environment
+      - name: Prepare SSH
         run: |
-          # Создаем .ssh директорию с правильными правами
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          # Создаем временные файлы
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
+          chmod 600 key.pem
           
-          # Записываем приватный ключ
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          
-          # Добавляем хост в known_hosts
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-          
-          # Проверяем создание
-          ls -la ~/.ssh
-
-      - name: Test SSH connection
-        run: |
-          ssh -T -o StrictHostKeyChecking=no \
-              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-              "echo 'SSH connection successful!'; hostname; date"
+          # Собираем известные хосты
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} > known_hosts
+          echo "Prepared SSH files:"
+          ls -la key.pem known_hosts
 
       - name: Deploy to server
         run: |
-          ssh -o StrictHostKeyChecking=no \
+          ssh -i key.pem \
+              -o UserKnownHostsFile=known_hosts \
+              -o StrictHostKeyChecking=no \
               ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
               "cd /opt/hospital && \
                docker-compose down --remove-orphans && \
@@ -103,3 +93,8 @@ jobs:
                  -e DB_PASSWORD=securepass \
                  ${{ env.DOCKERHUB_USERNAME }}/db_migrations:latest && \
                echo '🟢 Deployment successful! $(date)'"
+
+      - name: Cleanup
+        run: |
+          rm key.pem known_hosts
+          echo "Temporary files removed"

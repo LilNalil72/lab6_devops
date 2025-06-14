@@ -46,7 +46,7 @@ def create_appointment():
 
 @app.route('/health')
 def health_check():
-    return jsonify({"status": "healthy", "version": "1.0.0"})   
+    return jsonify({"status": "healthy", "version": "2.0.0"})   
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
