@@ -10,7 +10,7 @@ env:
   SHORT_SHA:  ${{ github.sha }}
 
 jobs:
-# ────────── CI ──────────
+# ────────── CI ────────
   build:
     runs-on: ubuntu-latest
 
