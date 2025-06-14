@@ -3,7 +3,7 @@ name: Build, Push and Deploy
 on:
   push:
     branches: [notmain]
-  workflow_dispatch:  # Разрешить ручной запуск
+  workflow_dispatch:
 
 env:
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -62,10 +62,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Configure SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
         with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: ${{ secrets.KNOWN_HOSTS || 'github.com' }}
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1
@@ -73,19 +74,16 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           script: |
-            # Переходим в рабочую директорию
             cd /opt/hospital
-            
-            # Останавливаем текущие контейнеры
             docker-compose down --remove-orphans
-            
-            # Получаем новые образы из Docker Hub
             docker-compose pull
+            docker-compose up -d
             
-            # Запускаем обновленные контейнеры
-            docker-compose up -d --build
+            # Проверяем работу приложений
+            curl --retry 3 --retry-delay 5 http://localhost:8000/health
+            curl --retry 3 --retry-delay 5 http://localhost:8001/health
             
-            # Применяем миграции БД
+            # Применяем миграции
             docker run --rm \
               --network hospital_default \
               -e DB_HOST=postgres \
@@ -95,6 +93,4 @@ jobs:
               -e DB_PASSWORD=securepass \
               ${{ env.DOCKERHUB_USERNAME }}/db_migrations:latest
             
-            # Проверяем состояние
-            docker ps
-            echo "Deployment completed at $(date)"
+            echo "🟢 Deployment successful! $(date)"
