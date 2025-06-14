@@ -62,17 +62,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
+      - name: Setup SSH environment
         run: |
+          # Создаем .ssh директорию с правильными правами
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          
+          # Записываем приватный ключ
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # Добавляем хост в known_hosts
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
+          
+          # Проверяем создание
+          ls -la ~/.ssh
+
+      - name: Test SSH connection
+        run: |
+          ssh -T -o StrictHostKeyChecking=no \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+              "echo 'SSH connection successful!'; hostname; date"
 
       - name: Deploy to server
         run: |
