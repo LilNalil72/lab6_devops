@@ -13,6 +13,17 @@ jobs:
 # ────────── CI ──────────
   build:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - service: app_registry
+            context: ./app_registry
+          - service: app_schedule
+            context: ./app_schedule
+          - service: db_migrations
+            context: ./db_migrations
+
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v2
@@ -24,15 +35,16 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & push images
+      - name: Build & push ${{ matrix.service }}
         uses: docker/build-push-action@v4
         with:
-          push: true
+          context: ${{ matrix.context }}
+          file:   ${{ matrix.context }}/Dockerfile
+          push:   true
           platforms: linux/amd64
           tags: |
-            ${{ env.IMAGE_OWNER }}/app_registry:latest,${{ env.IMAGE_OWNER }}/app_registry:${{ env.SHORT_SHA }}
-            ${{ env.IMAGE_OWNER }}/app_schedule:latest,${{ env.IMAGE_OWNER }}/app_schedule:${{ env.SHORT_SHA }}
-            ${{ env.IMAGE_OWNER }}/db_migrations:latest,${{ env.IMAGE_OWNER }}/db_migrations:${{ env.SHORT_SHA }}
+            ${{ env.IMAGE_OWNER }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_OWNER }}/${{ matrix.service }}:${{ env.SHORT_SHA }}
 
 # ────────── CD ──────────
   deploy:
@@ -53,9 +65,9 @@ jobs:
               ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} <<'EOF'
             set -euo pipefail
             cd /opt/hospital
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
-            docker compose -f docker-compose.prod.yml run --rm db_migrations
+            docker compose pull
+            docker compose up -d
+            docker compose run --rm db_migrations
             echo "🟢 Deployment finished $(date)"
           EOF
 
