@@ -1,7 +1,7 @@
-version: '3.8'
+version: "3.8"
 
 volumes:
-  pg_data: 
+  pg_data:
     driver: local
     driver_opts:
       type: none
@@ -11,9 +11,10 @@ volumes:
 services:
   postgres:
     image: postgres:14
+    restart: always
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./db_migrations:/docker-entrypoint-initdb.d  # Монтируем миграции
+      - ./db_migrations:/docker-entrypoint-initdb.d
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin
@@ -23,35 +24,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  migration-runner:
-    image: postgres:14
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./db_migrations:/migrations
-    command: >
-      bash -c "for file in /migrations/V*.sql; do
-        version=$${file#*V}
-        version=$${version%%__*}
-        check=$$(PGPASSWORD=$$DB_PASSWORD psql -h postgres -U $$DB_USER -d $$DB_NAME -tAc 'SELECT 1 FROM schema_version WHERE version='$$version)
-        if [ -z \"$$check\" ]; then
-          echo 'Applying migration: $${file}';
-          PGPASSWORD=$$DB_PASSWORD psql -h postgres -U $$DB_USER -d $$DB_NAME -f $${file};
-        else
-          echo 'Migration V'$$version' already applied, skipping';
-        fi
-      done"
-    environment:
-      DB_NAME: hospital
-      DB_USER: admin
-      DB_PASSWORD: securepass
+    ports: [ "5432:5432" ]
 
   app_registry:
-    build: ./app_registry
-    ports:
-      - "8000:8000"
+    image: ${IMAGE_OWNER}/app_registry:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,11 +37,25 @@ services:
       DB_NAME: hospital
       DB_USER: admin
       DB_PASSWORD: securepass
+    restart: always
+    ports: [ "8000:8000" ]
 
   app_schedule:
-    build: ./app_schedule
-    ports:
-      - "8001:8000"
+    image: ${IMAGE_OWNER}/app_schedule:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: securepass
+    restart: always
+    ports: [ "8001:8000" ]
+
+  db_migrations:
+    image: ${IMAGE_OWNER}/db_migrations:latest
     depends_on:
       postgres:
         condition: service_healthy

@@ -2,24 +2,21 @@ name: Build, Push and Deploy
 
 on:
   push:
-    branches: [notmain]
+    branches: [ notmain ]
   workflow_dispatch:
 
 env:
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  IMAGE_OWNER: ${{ secrets.DOCKERHUB_USERNAME }}
+  SHORT_SHA:  ${{ github.sha }}
 
 jobs:
+# ────────── CI ──────────
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v2
+      - uses: docker/setup-buildx-action@v2
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -27,74 +24,40 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build & Push Registry Service
+      - name: Build & push images
         uses: docker/build-push-action@v4
         with:
-          context: ./app_registry
-          file: ./app_registry/Dockerfile
           push: true
+          platforms: linux/amd64
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/app_registry:latest
-            ${{ env.DOCKERHUB_USERNAME }}/app_registry:${{ github.sha }}
+            ${{ env.IMAGE_OWNER }}/app_registry:latest,${{ env.IMAGE_OWNER }}/app_registry:${{ env.SHORT_SHA }}
+            ${{ env.IMAGE_OWNER }}/app_schedule:latest,${{ env.IMAGE_OWNER }}/app_schedule:${{ env.SHORT_SHA }}
+            ${{ env.IMAGE_OWNER }}/db_migrations:latest,${{ env.IMAGE_OWNER }}/db_migrations:${{ env.SHORT_SHA }}
 
-      - name: Build & Push Schedule Service
-        uses: docker/build-push-action@v4
-        with:
-          context: ./app_schedule
-          file: ./app_schedule/Dockerfile
-          push: true
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/app_schedule:latest
-            ${{ env.DOCKERHUB_USERNAME }}/app_schedule:${{ github.sha }}
-
-      - name: Build & Push DB Migrations
-        uses: docker/build-push-action@v4
-        with:
-          context: ./db_migrations
-          file: ./db_migrations/Dockerfile
-          push: true
-          tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/db_migrations:latest
-            ${{ env.DOCKERHUB_USERNAME }}/db_migrations:${{ github.sha }}
-
+# ────────── CD ──────────
   deploy:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
     needs: build
+    runs-on: ubuntu-latest
     steps:
       - name: Prepare SSH
         run: |
-          # Создаем временные файлы
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
           chmod 600 key.pem
-          
-          # Собираем известные хосты
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} > known_hosts
-          echo "Prepared SSH files:"
-          ls -la key.pem known_hosts
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> known_hosts
 
-      - name: Deploy to server
+      - name: Deploy to production
+        env:
+          IMAGE_OWNER: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          ssh -i key.pem \
-              -o UserKnownHostsFile=known_hosts \
-              -o StrictHostKeyChecking=no \
-              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-              "cd /opt/hospital && \
-               docker-compose down --remove-orphans && \
-               docker-compose pull && \
-               docker-compose up -d && \
-               echo 'Docker services updated' && \
-               docker run --rm \
-                 --network hospital_default \
-                 -e DB_HOST=postgres \
-                 -e DB_PORT=5432 \
-                 -e DB_NAME=hospital \
-                 -e DB_USER=admin \
-                 -e DB_PASSWORD=securepass \
-                 ${{ env.DOCKERHUB_USERNAME }}/db_migrations:latest && \
-               echo '🟢 Deployment successful! $(date)'"
+          ssh -i key.pem -o UserKnownHostsFile=known_hosts \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} <<'EOF'
+            set -euo pipefail
+            cd /opt/hospital
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker compose -f docker-compose.prod.yml run --rm db_migrations
+            echo "🟢 Deployment finished $(date)"
+          EOF
 
       - name: Cleanup
-        run: |
-          rm key.pem known_hosts
-          echo "Temporary files removed"
+        run: rm -f key.pem known_hosts
