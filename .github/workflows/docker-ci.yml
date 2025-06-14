@@ -60,7 +60,7 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: build  # Зависит от успешного выполнения сборки
+    needs: build
     steps:
       - name: Configure SSH
         uses: webfactory/ssh-agent@v0.9.0
@@ -85,7 +85,7 @@ jobs:
             # Запускаем обновленные контейнеры
             docker-compose up -d --build
             
-            # Применяем миграции БД (если контейнер не запускается автоматически)
+            # Применяем миграции БД
             docker run --rm \
               --network hospital_default \
               -e DB_HOST=postgres \
@@ -98,5 +98,3 @@ jobs:
             # Проверяем состояние
             docker ps
             echo "Deployment completed at $(date)"
-          env:
-            DOCKERHUB_USERNAME: ${{ env.DOCKERHUB_USERNAME }}
