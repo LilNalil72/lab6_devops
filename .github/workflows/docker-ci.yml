@@ -130,8 +130,8 @@ jobs:
             echo "🔄 Stopping old containers..."
             docker compose down --remove-orphans --timeout 60
             
-            echo "🚀 Starting PostgreSQL..."
-            docker compose up -d postgres
+            echo "🚀 Starting all services..."
+            docker compose up -d
             
             echo "⏳ Waiting for PostgreSQL to be ready..."
             for i in {1..60}; do
@@ -139,8 +139,8 @@ jobs:
                 echo "✅ PostgreSQL is ready!"
                 break
               fi
-              echo "⏱ Waiting for PostgreSQL ($i/60)..."
-              sleep 2
+              echo "⏱️ Waiting for PostgreSQL ($i/60)..."
+              sleep 3
             done
             
             # Проверяем статус PostgreSQL
@@ -153,51 +153,71 @@ jobs:
             echo "📝 Applying database migrations..."
             docker compose run --rm db_migrations
             
-            echo "🚀 Starting application services..."
-            docker compose up -d app_registry app_schedule
+            echo "🔄 Restarting app services after migrations..."
+            docker compose restart app_registry app_schedule
             
             echo "⏳ Waiting for services to initialize..."
-            sleep 15
+            sleep 20
+            
+            echo "📊 Current container status:"
+            docker compose ps
             
             echo "🩺 Performing health checks..."
+            
             # Проверяем сервис реестра
+            REGISTRY_OK=false
             for i in {1..30}; do
               if curl -sSf http://localhost:8000/health > /dev/null 2>&1; then
                 echo "✅ Registry health check passed"
+                REGISTRY_OK=true
                 break
               fi
-              echo "⏱ Waiting for registry service ($i/30)..."
-              sleep 2
+              echo "⏱️ Waiting for registry service ($i/30)..."
+              sleep 3
             done
             
             # Проверяем сервис расписаний
+            SCHEDULE_OK=false
             for i in {1..30}; do
               if curl -sSf http://localhost:8001/schedules > /dev/null 2>&1; then
                 echo "✅ Schedule health check passed"
+                SCHEDULE_OK=true
                 break
               fi
-              echo "⏱ Waiting for schedule service ($i/30)..."
-              sleep 2
+              echo "⏱️ Waiting for schedule service ($i/30)..."
+              sleep 3
             done
             
-            # Финальная проверка
-            if ! curl -sSf http://localhost:8000/health > /dev/null 2>&1; then
-              echo "❌ Registry health check failed"
-              docker compose logs app_registry
-              exit 1
+            # Показываем логи в случае проблем
+            if [ "$REGISTRY_OK" = false ]; then
+              echo "❌ Registry health check failed. Logs:"
+              docker compose logs --tail=50 app_registry
             fi
             
-            if ! curl -sSf http://localhost:8001/schedules > /dev/null 2>&1; then
-              echo "❌ Schedule health check failed"
-              docker compose logs app_schedule
+            if [ "$SCHEDULE_OK" = false ]; then
+              echo "❌ Schedule health check failed. Logs:" 
+              docker compose logs --tail=50 app_schedule
+            fi
+            
+            # Финальная проверка
+            if [ "$REGISTRY_OK" = false ] || [ "$SCHEDULE_OK" = false ]; then
+              echo "❌ Some services failed health checks"
+              echo "📊 Final container status:"
+              docker compose ps -a
               exit 1
             fi
             
             echo "✅ Deployment completed successfully at $(date)"
+            echo "🎉 All services are healthy!"
             echo "📊 Final status:"
             docker compose ps
+            
+            # Показываем доступные эндпоинты
+            echo "🌐 Available endpoints:"
+            echo "  - Registry: http://localhost:8000"
+            echo "  - Schedule: http://localhost:8001"
           DEPLOY_EOF
-
+                
       - name: Cleanup
         run: |
           echo "🧹 Cleaning up..."
