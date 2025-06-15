@@ -2,7 +2,7 @@ name: Hospital System CI/CD
 
 on:
   push:
-    branches: [notmain]
+    branches: [main_main]
   workflow_dispatch:
 
 env:
@@ -124,62 +124,100 @@ jobs:
             set -e
             cd /opt/hospital
             
-            # Удаляем старый том для чистого запуска
-            docker volume rm -f hospital_pg_data 2>/dev/null || true
-            
             echo "⬇️ Pulling new images..."
             docker compose pull
             
-            echo "🔄 Restarting containers..."
+            echo "🔄 Stopping old containers..."
             docker compose down --remove-orphans --timeout 60
-            docker compose up -d --wait postgres app_registry app_schedule
             
-            echo "⏳ Waiting for PostgreSQL initialization..."
-            # Ждем пока PostgreSQL станет доступен
-            for i in {1..30}; do
-              if docker compose exec postgres pg_isready -U admin; then
+            echo "🚀 Starting all services..."
+            docker compose up -d
+            
+            echo "⏳ Waiting for PostgreSQL to be ready..."
+            for i in {1..60}; do
+              if docker compose exec -T postgres pg_isready -U admin -d hospital; then
                 echo "✅ PostgreSQL is ready!"
                 break
               fi
-              echo "⏱ Waiting for PostgreSQL ($i/30)..."
-              sleep 2
+              echo "⏱️ Waiting for PostgreSQL ($i/60)..."
+              sleep 3
             done
             
             # Проверяем статус PostgreSQL
-            if ! docker compose exec postgres pg_isready -U admin; then
+            if ! docker compose exec -T postgres pg_isready -U admin -d hospital; then
               echo "❌ ERROR: PostgreSQL failed to start"
               docker compose logs postgres
-              exit 1
-            fi
-            
-            echo "⏳ Waiting for services to initialize..."
-            sleep 10
-            
-            echo "🩺 Performing health checks..."
-            # Проверяем сервис реестра
-            if curl -sSf http://localhost:8000/health; then
-              echo "✅ Registry health check passed"
-            else
-              echo "❌ Registry health check failed"
-              docker compose logs app_registry
-              exit 1
-            fi
-            
-            # Проверяем сервис расписаний
-            if curl -sSf http://localhost:8001/schedules; then
-              echo "✅ Schedule health check passed"
-            else
-              echo "❌ Schedule health check failed"
-              docker compose logs app_schedule
               exit 1
             fi
             
             echo "📝 Applying database migrations..."
             docker compose run --rm db_migrations
             
-            echo "✅ Deployment completed at $(date)"
+            echo "🔄 Restarting app services after migrations..."
+            docker compose restart app_registry app_schedule
+            
+            echo "⏳ Waiting for services to initialize..."
+            sleep 20
+            
+            echo "📊 Current container status:"
+            docker compose ps
+            
+            echo "🩺 Performing health checks..."
+            
+            # Проверяем сервис реестра
+            REGISTRY_OK=false
+            for i in {1..30}; do
+              if curl -sSf http://localhost:8000/health > /dev/null 2>&1; then
+                echo "✅ Registry health check passed"
+                REGISTRY_OK=true
+                break
+              fi
+              echo "⏱️ Waiting for registry service ($i/30)..."
+              sleep 3
+            done
+            
+            # Проверяем сервис расписаний
+            SCHEDULE_OK=false
+            for i in {1..30}; do
+              if curl -sSf http://localhost:8001/schedules > /dev/null 2>&1; then
+                echo "✅ Schedule health check passed"
+                SCHEDULE_OK=true
+                break
+              fi
+              echo "⏱️ Waiting for schedule service ($i/30)..."
+              sleep 3
+            done
+            
+            # Показываем логи в случае проблем
+            if [ "$REGISTRY_OK" = false ]; then
+              echo "❌ Registry health check failed. Logs:"
+              docker compose logs --tail=50 app_registry
+            fi
+            
+            if [ "$SCHEDULE_OK" = false ]; then
+              echo "❌ Schedule health check failed. Logs:" 
+              docker compose logs --tail=50 app_schedule
+            fi
+            
+            # Финальная проверка
+            if [ "$REGISTRY_OK" = false ] || [ "$SCHEDULE_OK" = false ]; then
+              echo "❌ Some services failed health checks"
+              echo "📊 Final container status:"
+              docker compose ps -a
+              exit 1
+            fi
+            
+            echo "✅ Deployment completed successfully at $(date)"
+            echo "🎉 All services are healthy!"
+            echo "📊 Final status:"
+            docker compose ps
+            
+            # Показываем доступные эндпоинты
+            echo "🌐 Available endpoints:"
+            echo "  - Registry: http://localhost:8000"
+            echo "  - Schedule: http://localhost:8001"
           DEPLOY_EOF
-
+                
       - name: Cleanup
         run: |
           echo "🧹 Cleaning up..."
