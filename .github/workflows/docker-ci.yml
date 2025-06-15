@@ -2,7 +2,7 @@ name: Hospital System CI/CD
 
 on:
   push:
-    branches: [notmain]
+    branches: [main_main]
   workflow_dispatch:
 
 env:
