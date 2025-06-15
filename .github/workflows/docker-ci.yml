@@ -8,7 +8,6 @@ on:
 env:
   IMAGE_OWNER: ${{ secrets.DOCKERHUB_USERNAME }}
   SHORT_SHA: ${{ github.sha }}
-  # Добавляем переменную для SSH-порта
   SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
 
 jobs:
@@ -52,7 +51,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
@@ -61,48 +60,43 @@ jobs:
 
       - name: Verify server accessibility
         run: |
-          echo "🔍 Checking server accessibility on port $SSH_PORT..."
-          if ! nc -z -w 15 "${{ secrets.SSH_HOST }}" "$SSH_PORT"; then
-            echo "❌ ERROR: Server ${{ secrets.SSH_HOST }}:$SSH_PORT is unreachable"
-            echo "Possible reasons:"
-            echo "1. Wrong IP/host in secrets.SSH_HOST"
-            echo "2. Firewall blocking port $SSH_PORT"
-            echo "3. Server offline or not responding"
-            exit 1
-          else
+          echo "🔍 Checking server ${{ secrets.SSH_HOST }}:$SSH_PORT..."
+          if nc -z -w 10 "${{ secrets.SSH_HOST }}" "$SSH_PORT"; then
             echo "✅ Server is reachable on port $SSH_PORT"
+          else
+            echo "❌ ERROR: Server ${{ secrets.SSH_HOST }}:$SSH_PORT unreachable"
+            echo "Possible reasons:"
+            echo "1. Incorrect SSH_HOST in secrets"
+            echo "2. Firewall blocking port $SSH_PORT"
+            echo "3. Server offline"
+            echo "4. Network issues"
+            exit 1
           fi
 
       - name: Prepare SSH environment
         run: |
-          echo "Starting SSH preparation..."
+          echo "🚀 Starting SSH preparation..."
           
-          # Создаем файл с ключом (без вывода в лог)
-          echo "Creating SSH key file..."
+          # Create private key file securely
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
           chmod 600 key.pem
           
-          # Создаем known_hosts с обработкой ошибок
-          echo "Creating known_hosts file..."
-          ssh-keyscan -p "$SSH_PORT" -H "${{ secrets.SSH_HOST }}" > known_hosts 2>&1 || {
-            echo "⚠️ Warning: ssh-keyscan failed. Continuing without host verification..."
-            echo "" > known_hosts
-          }
-
-          # Тестируем подключение с указанием порта
-          echo "Testing SSH connection to ${{ secrets.SSH_HOST }}:$SSH_PORT..."
+          # Generate known_hosts with error handling
+          echo "🔑 Running ssh-keyscan..."
+          ssh-keyscan -p "$SSH_PORT" -H "${{ secrets.SSH_HOST }}" > known_hosts 2>/dev/null || true
+          
+          # Test SSH connection
+          echo "🧪 Testing SSH connection..."
           ssh -i key.pem \
               -p "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
               ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-              "echo '✅ SSH connection successful! Hostname: \$(hostname)'"
-          
-          echo "✅ SSH preparation completed!"
+              "echo '✅ SSH successful! Host: \$(hostname)'"
 
       - name: Copy configuration to server
         run: |
-          echo "Copying files to server..."
+          echo "📤 Copying files to server..."
           scp -i key.pem \
               -P "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
@@ -117,42 +111,50 @@ jobs:
             .env \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
           
-          echo "✅ Files copied successfully."
+          echo "✅ Files copied successfully"
 
       - name: Deploy application stack
         run: |
-          echo "Starting deployment..."
+          echo "🚀 Starting deployment..."
           ssh -i key.pem \
               -p "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
             set -euxo pipefail
-            echo "Changing to /opt/hospital directory..."
             cd /opt/hospital
             
-            echo "Updating images..."
-            docker compose pull --quiet
+            # Create PostgreSQL data directory
+            echo "🛠 Creating db_data directory..."
+            sudo mkdir -p db_data
+            sudo chown -R 999:999 db_data  # PostgreSQL container user UID
+            sudo chmod -R 775 db_data
             
-            echo "Restarting containers..."
+            echo "⬇️ Pulling new images..."
+            docker compose pull
+            
+            echo "🔄 Restarting containers..."
             docker compose down --remove-orphans --timeout 60
             docker compose up -d --wait
             
-            echo "Waiting for services to initialize..."
-            sleep 15
+            echo "⏳ Waiting for PostgreSQL to start..."
+            timeout 60s bash -c 'until docker compose exec postgres pg_isready -U admin; do sleep 2; done'
             
-            echo "Performing health checks..."
-            curl --fail http://localhost:8000/health || echo "⚠️ Registry health check failed"
-            curl --fail http://localhost:8001/schedules || echo "⚠️ Schedule health check failed"
+            echo "⏳ Waiting for services to initialize..."
+            sleep 10
             
-            echo "Applying database migrations..."
+            echo "🩺 Performing health checks..."
+            curl --fail http://localhost:8000/health || { echo "⚠️ Registry health check failed" >&2; exit 1; }
+            curl --fail http://localhost:8001/schedules || { echo "⚠️ Schedule health check failed" >&2; exit 1; }
+            
+            echo "📝 Applying database migrations..."
             docker compose run --rm db_migrations
             
-            echo "✅ Deployment successful! $(date)"
+            echo "✅ Deployment completed at $(date)"
           DEPLOY_EOF
 
       - name: Cleanup
         run: |
-          echo "Cleaning up temporary files..."
+          echo "🧹 Cleaning up..."
           rm -f key.pem known_hosts
-          echo "✅ Cleanup completed."
+          echo "✅ Cleanup done"
