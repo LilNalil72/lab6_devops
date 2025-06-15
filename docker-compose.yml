@@ -73,5 +73,8 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
       GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel
+      # Добавляем переменные для подключения к БД в конфигурации
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy

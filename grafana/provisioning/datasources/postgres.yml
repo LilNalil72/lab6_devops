@@ -4,7 +4,7 @@ datasources:
   - name: Hospital PostgreSQL
     type: postgres
     access: proxy
-    host: postgres:5432
+    url: postgres:5432
     database: hospital
     user: admin
     secureJsonData:
@@ -13,9 +13,6 @@ datasources:
       sslmode: disable
       postgresVersion: 1400
       timescaledb: false
-      maxOpenConns: 100
-      maxIdleConns: 100
-      connMaxLifetime: 14400
     isDefault: true
     editable: true
-    uid: hospital-postgres
+    uid: hospital_postgres
