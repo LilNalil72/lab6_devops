@@ -13,7 +13,42 @@ env:
 
 jobs:
   build:
-    # ... (остается без изменений) ...
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - service: app_registry
+            context: ./app_registry
+          - service: app_schedule
+            context: ./app_schedule
+          - service: db_migrations
+            context: ./db_migrations
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_OWNER }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_OWNER }}/${{ matrix.service }}:${{ env.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     needs: build
