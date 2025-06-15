@@ -56,6 +56,32 @@ def create_doctor():
         conn.commit()
         return jsonify(id=doctor_id), 201
 
+@app.route("/patients", methods=["GET"])
+def get_patients():
+    """Get list of all patients"""
+    search = request.args.get('search', '')
+    
+    with get_db_connection() as conn, conn.cursor() as cur:
+        query = "SELECT id, full_name, policy_number, email FROM patients"
+        params = []
+        
+        if search:
+            query += " WHERE full_name ILIKE %s OR policy_number ILIKE %s"
+            params.extend([f'%{search}%', f'%{search}%'])
+        
+        query += " ORDER BY full_name;"
+        cur.execute(query, params)
+        
+        patients = []
+        for row in cur.fetchall():
+            patients.append({
+                "id": row[0],
+                "full_name": row[1],
+                "policy_number": row[2],
+                "email": row[3]
+            })
+        return jsonify(patients)        
+
 @app.route("/patients", methods=["POST"])
 def create_patient():
     """Register a new patient"""
