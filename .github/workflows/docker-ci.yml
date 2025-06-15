@@ -10,7 +10,6 @@ env:
   SHORT_SHA: ${{ github.sha }}
 
 jobs:
-  # ─────────── CI: Сборка и пуш образов ───────────
   build:
     runs-on: ubuntu-latest
 
@@ -49,7 +48,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # ─────────── CD: Деплой на сервер ───────────
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -61,44 +59,70 @@ jobs:
 
       - name: Prepare SSH environment
         run: |
-          # Создаем временные файлы для SSH
+          echo "Starting SSH preparation..."
+          
+          # Создаем файл с ключом
+          echo "Creating SSH key file..."
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
           chmod 600 key.pem
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} > known_hosts
-          echo "SSH files prepared:"
+          
+          # Создаем known_hosts
+          echo "Creating known_hosts file..."
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} > known_hosts 2>/dev/null || true
+          
+          # Проверяем файлы
+          echo "File verification:"
           ls -la key.pem known_hosts
+          echo "Key file content (first line):"
+          head -1 key.pem
+          echo "Known hosts content:"
+          cat known_hosts
+          
+          # Тестируем подключение
+          echo "Testing SSH connection..."
+          ssh -i key.pem -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=no \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+              "echo 'SSH connection successful! Hostname: \$(hostname); Date: \$(date)'"
+          
+          echo "✅ SSH preparation completed!"
 
       - name: Copy configuration to server
         run: |
-          # Копируем docker-compose.yml и .env на сервер
-          scp -i key.pem -o UserKnownHostsFile=known_hosts \
+          echo "Copying files to server..."
+          scp -i key.pem -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=no \
             docker-compose.yml \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
-
-          scp -i key.pem -o UserKnownHostsFile=known_hosts \
+          
+          scp -i key.pem -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=no \
             .env \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
+          
+          echo "Files copied successfully."
 
       - name: Deploy application stack
         run: |
-          ssh -i key.pem -o UserKnownHostsFile=known_hosts \
+          echo "Starting deployment..."
+          ssh -i key.pem -o UserKnownHostsFile=known_hosts -o StrictHostKeyChecking=no \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
             set -euxo pipefail
+            echo "Changing to /opt/hospital directory..."
             cd /opt/hospital
             
-            # Обновляем образы
+            echo "Pulling new images..."
             docker compose pull
             
-            # Перезапускаем контейнеры
+            echo "Restarting containers..."
             docker compose down --remove-orphans --timeout 60
             docker compose up -d --wait
             
-            # Проверяем работу приложений
+            echo "Waiting for services to start..."
             sleep 10
+            
+            echo "Performing health checks..."
             curl -f http://localhost:8000/health || echo "Registry health check failed"
             curl -f http://localhost:8001/schedules || echo "Schedule health check failed"
             
-            # Применяем миграции
+            echo "Applying database migrations..."
             docker compose run --rm db_migrations
             
             echo "✅ Deployment successful! $(date)"
@@ -106,5 +130,6 @@ jobs:
 
       - name: Cleanup
         run: |
+          echo "Cleaning up temporary files..."
           rm -f key.pem known_hosts
-          echo "Temporary files removed"
+          echo "Cleanup completed."
