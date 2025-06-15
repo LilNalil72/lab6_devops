@@ -1,26 +1,21 @@
-version: "3.8"
-
 volumes:
-  pg_data:
+  pg_data:  # Используем стандартный Docker volume
 
 services:
   postgres:
     image: postgres:14
     restart: always
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data  # Используем именованный том
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d hospital"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    ports:
-      - "5432:5432"
 
   app_registry:
     image: ${IMAGE_OWNER}/app_registry:latest
