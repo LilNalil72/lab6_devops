@@ -132,7 +132,7 @@ jobs:
             
             echo "🔄 Restarting containers..."
             docker compose down --remove-orphans --timeout 60
-            docker compose up -d --wait
+            docker compose up -d --wait postgres app_registry app_schedule
             
             echo "⏳ Waiting for PostgreSQL initialization..."
             # Ждем пока PostgreSQL станет доступен
