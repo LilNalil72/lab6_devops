@@ -1,5 +1,6 @@
 volumes:
   pg_data:  # Используем стандартный Docker volume
+  grafana_data:  # Том для данных Grafana
 
 services:
   postgres:
@@ -58,3 +59,19 @@ services:
       DB_NAME: hospital
       DB_USER: admin
       DB_PASSWORD: ${POSTGRES_PASSWORD}
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-worldmap-panel
+    depends_on:
+      - postgres

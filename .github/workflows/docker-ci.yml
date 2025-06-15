@@ -111,6 +111,14 @@ jobs:
             .env \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
           
+          # Copy Grafana configuration
+          scp -i key.pem \
+              -P "$SSH_PORT" \
+              -o UserKnownHostsFile=known_hosts \
+              -o StrictHostKeyChecking=no \
+              -r grafana \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
+          
           echo "✅ Files copied successfully"
 
       - name: Deploy application stack
@@ -188,6 +196,18 @@ jobs:
               sleep 3
             done
             
+            # Проверяем Grafana
+            GRAFANA_OK=false
+            for i in {1..30}; do
+              if curl -sSf http://localhost:3000/api/health > /dev/null 2>&1; then
+                echo "✅ Grafana health check passed"
+                GRAFANA_OK=true
+                break
+              fi
+              echo "⏱️ Waiting for Grafana service ($i/30)..."
+              sleep 3
+            done
+            
             # Показываем логи в случае проблем
             if [ "$REGISTRY_OK" = false ]; then
               echo "❌ Registry health check failed. Logs:"
@@ -199,8 +219,13 @@ jobs:
               docker compose logs --tail=50 app_schedule
             fi
             
+            if [ "$GRAFANA_OK" = false ]; then
+              echo "❌ Grafana health check failed. Logs:" 
+              docker compose logs --tail=50 grafana
+            fi
+            
             # Финальная проверка
-            if [ "$REGISTRY_OK" = false ] || [ "$SCHEDULE_OK" = false ]; then
+            if [ "$REGISTRY_OK" = false ] || [ "$SCHEDULE_OK" = false ] || [ "$GRAFANA_OK" = false ]; then
               echo "❌ Some services failed health checks"
               echo "📊 Final container status:"
               docker compose ps -a
@@ -216,6 +241,7 @@ jobs:
             echo "🌐 Available endpoints:"
             echo "  - Registry: http://localhost:8000"
             echo "  - Schedule: http://localhost:8001"
+            echo "  - Grafana: http://localhost:3000 (admin/admin123)"
           DEPLOY_EOF
                 
       - name: Cleanup

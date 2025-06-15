@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: Hospital PostgreSQL
+    type: postgres
+    access: proxy
+    host: postgres:5432
+    database: hospital
+    user: admin
+    secureJsonData:
+      password: securepass
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1400
+      timescaledb: false
+    isDefault: true
+    editable: true

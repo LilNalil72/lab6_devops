@@ -1,0 +1,252 @@
+
+{
+  "dashboard": {
+    "id": null,
+    "title": "Hospital System Overview",
+    "tags": ["hospital", "overview"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Total Doctors",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT COUNT(*) as count FROM doctors",
+            "refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 0,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Total Patients",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT COUNT(*) as count FROM patients",
+            "refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 6,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "blue",
+                  "value": null
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Active Appointments",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT COUNT(*) as count FROM appointments WHERE status = 'planned' AND appointment_time > NOW()",
+            "refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 12,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "orange",
+                  "value": null
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Completed Appointments",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT COUNT(*) as count FROM appointments WHERE status = 'completed'",
+            "refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 8,
+          "w": 6,
+          "x": 18,
+          "y": 0
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "mappings": [],
+            "thresholds": {
+              "steps": [
+                {
+                  "color": "green",
+                  "value": null
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Doctors by Specialization",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT specialization, COUNT(*) as count FROM doctors GROUP BY specialization",
+"refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 0,
+          "y": 8
+        }
+      },
+      {
+        "id": 6,
+        "title": "Appointments by Status",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT status, COUNT(*) as count FROM appointments GROUP BY status",
+            "refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 12,
+          "y": 8
+        }
+      },
+      {
+        "id": 7,
+        "title": "Recent Appointments",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "",
+            "format": "table",
+            "rawSql": "SELECT \n  a.appointment_time,\n  d.full_name as doctor,\n  d.specialization,\n  p.full_name as patient,\n  a.status\nFROM appointments a\nJOIN doctors d ON a.doctor_id = d.id\nJOIN patients p ON a.patient_id = p.id\nORDER BY a.appointment_time DESC\nLIMIT 10",
+            "refId": "A",
+            "datasource": {
+              "type": "postgres",
+              "uid": "Hospital PostgreSQL"
+            }
+          }
+        ],
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 17
+        }
+      }
+    ],
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "refresh": "5s",
+    "schemaVersion": 27,
+    "version": 1,
+    "links": []
+  }
+}
+ 
