@@ -1,19 +1,14 @@
-version: "3.8"
+# УДАЛИТЬ ЭТУ СТРОКУ: version: "3.8"
 
 volumes:
-  pg_data:
-    driver: local
-    driver_opts:
-      type: none
-      device: ./db_data
-      o: bind
+  pg_data:  # Используем стандартный Docker volume
 
 services:
   postgres:
     image: postgres:14
     restart: always
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data  # Используем именованный том
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin

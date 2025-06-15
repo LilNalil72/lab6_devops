@@ -57,7 +57,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Verify server accessibility
         run: |
           echo "🔍 Checking server ${{ secrets.SSH_HOST }}:$SSH_PORT..."
@@ -65,6 +65,11 @@ jobs:
             echo "✅ Server is reachable on port $SSH_PORT"
           else
             echo "❌ ERROR: Server ${{ secrets.SSH_HOST }}:$SSH_PORT unreachable"
+            echo "Possible reasons:"
+            echo "1. Incorrect SSH_HOST in secrets"
+            echo "2. Firewall blocking port $SSH_PORT"
+            echo "3. Server offline"
+            echo "4. Network issues"
             exit 1
           fi
 
@@ -116,43 +121,63 @@ jobs:
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
               ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
-              # Отключаем вывод команд для безопасности пароля
-              set +x
-              
-              cd /opt/hospital
-              
-              # Получаем пароль из переменной среды
-              SUDO_PASS='${{ secrets.SUDO_PASSWORD }}'
-              
-              echo "🛠 Creating db_data directory..."
-              echo "$SUDO_PASS" | sudo -S mkdir -p db_data
-              echo "$SUDO_PASS" | sudo -S chown -R 999:999 db_data
-              echo "$SUDO_PASS" | sudo -S chmod -R 775 db_data
-              
-              # Включаем отладку обратно
-              set -x
-              
-              echo "⬇️ Pulling new images..."
-              docker compose pull
-              
-              echo "🔄 Restarting containers..."
-              docker compose down --remove-orphans --timeout 60
-              docker compose up -d --wait
-              
-              echo "⏳ Waiting for PostgreSQL to start..."
-              timeout 60s bash -c 'until docker compose exec postgres pg_isready -U admin; do sleep 2; done'
-              
-              echo "⏳ Waiting for services to initialize..."
-              sleep 10
-              
-              echo "🩺 Performing health checks..."
-              curl --fail http://localhost:8000/health || { echo "⚠️ Registry health check failed" >&2; exit 1; }
-              curl --fail http://localhost:8001/schedules || { echo "⚠️ Schedule health check failed" >&2; exit 1; }
-              
-              echo "📝 Applying database migrations..."
-              docker compose run --rm db_migrations
-              
-              echo "✅ Deployment completed at $(date)"
+            set -e
+            cd /opt/hospital
+            
+            # Удаляем старый том для чистого запуска
+            docker volume rm -f hospital_pg_data 2>/dev/null || true
+            
+            echo "⬇️ Pulling new images..."
+            docker compose pull
+            
+            echo "🔄 Restarting containers..."
+            docker compose down --remove-orphans --timeout 60
+            docker compose up -d --wait
+            
+            echo "⏳ Waiting for PostgreSQL initialization..."
+            # Ждем пока PostgreSQL станет доступен
+            for i in {1..30}; do
+              if docker compose exec postgres pg_isready -U admin; then
+                echo "✅ PostgreSQL is ready!"
+                break
+              fi
+              echo "⏱ Waiting for PostgreSQL ($i/30)..."
+              sleep 2
+            done
+            
+            # Проверяем статус PostgreSQL
+            if ! docker compose exec postgres pg_isready -U admin; then
+              echo "❌ ERROR: PostgreSQL failed to start"
+              docker compose logs postgres
+              exit 1
+            fi
+            
+            echo "⏳ Waiting for services to initialize..."
+            sleep 10
+            
+            echo "🩺 Performing health checks..."
+            # Проверяем сервис реестра
+            if curl -sSf http://localhost:8000/health; then
+              echo "✅ Registry health check passed"
+            else
+              echo "❌ Registry health check failed"
+              docker compose logs app_registry
+              exit 1
+            fi
+            
+            # Проверяем сервис расписаний
+            if curl -sSf http://localhost:8001/schedules; then
+              echo "✅ Schedule health check passed"
+            else
+              echo "❌ Schedule health check failed"
+              docker compose logs app_schedule
+              exit 1
+            fi
+            
+            echo "📝 Applying database migrations..."
+            docker compose run --rm db_migrations
+            
+            echo "✅ Deployment completed at $(date)"
           DEPLOY_EOF
 
       - name: Cleanup
