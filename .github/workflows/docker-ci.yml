@@ -128,11 +128,9 @@ jobs:
             # Используем пароль из секретов для sudo
             SUDO_PASSWORD='${{ secrets.SUDO_PASSWORD }}'
             
-            # Создаем необходимые каталоги и устанавливаем права
-            echo "🛠 Creating required directories and setting permissions..."
-            echo "$SUDO_PASSWORD" | sudo -S mkdir -p db_data grafana-config/datasources grafana-config/dashboards 2>/dev/null
-            echo "$SUDO_PASSWORD" | sudo -S chown -R 999:999 db_data 2>/dev/null
-            echo "$SUDO_PASSWORD" | sudo -S chmod -R 775 db_data 2>/dev/null
+            # Создаем каталоги для Grafana
+            echo "🛠 Creating Grafana directories..."
+            echo "$SUDO_PASSWORD" | sudo -S mkdir -p grafana-config/datasources grafana-config/dashboards 2>/dev/null
             echo "$SUDO_PASSWORD" | sudo -S chown -R 472:472 grafana-config/datasources grafana-config/dashboards 2>/dev/null
             echo "$SUDO_PASSWORD" | sudo -S chmod -R 775 grafana-config/datasources grafana-config/dashboards 2>/dev/null
             

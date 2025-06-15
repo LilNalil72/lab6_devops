@@ -2,13 +2,14 @@ version: "3.8"
 
 volumes:
   grafana_data:
+  pg_data:
 
 services:
   postgres:
     image: postgres:14
     restart: always
     volumes:
-      - ./db_data:/var/lib/postgresql/data
+      - ./pg_data:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin
