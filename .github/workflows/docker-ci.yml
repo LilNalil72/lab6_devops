@@ -84,7 +84,7 @@ jobs:
               ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
               "echo 'SSH connection successful! Hostname: \$(hostname); Date: \$(date)'"
           
-          echo "✅ SSH preparation completed!"
+          echo "✅SSH preparation completed!"
 
       - name: Copy configuration to server
         run: |
