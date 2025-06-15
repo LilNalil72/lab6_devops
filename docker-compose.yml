@@ -1,18 +1,14 @@
-version: "3.8"
+# УДАЛИТЬ ЭТУ СТРОКУ: version: "3.8"
 
 volumes:
-  grafana_data:
-  pg_data:  # Именованный том для PostgreSQL
-  prometheus_data:  # Том для Prometheus
-  grafana_config:  # Том для Grafana
-
+  pg_data:  # Используем стандартный Docker
 
 services:
   postgres:
     image: postgres:14
     restart: always
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql/data  # Используем именованном
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin
@@ -64,29 +60,3 @@ services:
       DB_NAME: hospital
       DB_USER: admin
       DB_PASSWORD: ${POSTGRES_PASSWORD}
-
-  prometheus:
-    image: prom/prometheus:latest
-    volumes:
-      - prometheus_data:/prometheus
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-    ports:
-      - "9090:9090"
-    restart: always
-    depends_on:
-      - app_registry
-      - app_schedule
-
-  grafana:
-    image: grafana/grafana:latest
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - grafana_config:/etc/grafana/provisioning
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=grafana
-    ports:
-      - "3000:3000"
-    restart: always
