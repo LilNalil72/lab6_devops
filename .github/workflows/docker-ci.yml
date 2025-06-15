@@ -120,20 +120,17 @@ jobs:
               -p "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << DEPLOY_EOF
             set -euxo pipefail
             cd /opt/hospital
             
-            echo "🛠 Preparing PostgreSQL data directory..."
-            # Создаем директорию, если не существует
-            if [ ! -d "db_data" ]; then
-              echo "Creating db_data directory..."
-              mkdir -p db_data
-            fi
+            # Передаем пароль для sudo
+            SUDO_PASS='${{ secrets.SUDO_PASSWORD }}'
             
-            # Устанавливаем разрешения
-            echo "Setting permissions..."
-            chmod 775 db_data ⠞⠵⠺⠵⠵⠵⠞⠟⠟⠟⠵⠟⠺⠺⠟⠟⠞⠺⠟⠵⠟⠟⠟⠟⠟⠟⠵⠵⠵⠺⠺⠞⠞⠺⠞⠞⠞⠞⠺⠵⠵⠟⠟⠞⠵⠞⠞⠟⠞⠵⠺⠵⠺⠟⠺⠞⠺⠵⠵⠟⠺⠺⠺⠺⠵⠞⠟⠟⠟⠟⠺⠟⠵⠵⠵⠵⠞⠟⠺⠵⠞⠺⠺⠞⠟⠟⠞⠵⠟⠵⠵⠟⠟⠟⠟⠺⠵⠵⠞⠞⠟⠟⠟⠞⠟⠺⠟⠺⠞⠟⠺⠺⠟⠞⠺⠺⠞⠞⠺⠟⠺⠞⠺⠵⠵⠵⠞⠵⠺⠵⠟⠵⠟⠵⠺⠺⠵⠟⠟⠟⠵⠺⠞⠞⠺⠟⠟⠺⠞⠞⠟⠞⠟⠟⠺⠞⠺⠵⠟⠵⠵⠺⠟⠵ true
+            echo "🛠 Creating db_data directory..."
+            echo "\$SUDO_PASS" | sudo -S mkdir -p db_data
+            echo "\$SUDO_PASS" | sudo -S chown -R 999:999 db_data
+            echo "\$SUDO_PASS" | sudo -S chmod -R 775 db_data
             
             echo "⬇️ Pulling new images..."
             docker compose pull
@@ -142,27 +139,21 @@ jobs:
             docker compose down --remove-orphans --timeout 60
             docker compose up -d --wait
             
-            echo "⏳ Waiting for PostgreSQL initialization..."
-            for i in {1..30}; do
-              if docker compose exec postgres pg_isready -U admin; then
-                echo "PostgreSQL is ready!"
-                break
-              fi
-              echo "Waiting for PostgreSQL ($i/30)..."
-              sleep 2
-            done
+            echo "⏳ Waiting for PostgreSQL to start..."
+            timeout 60s bash -c 'until docker compose exec postgres pg_isready -U admin; do sleep 2; done'
             
             echo "⏳ Waiting for services to initialize..."
             sleep 10
             
             echo "🩺 Performing health checks..."
-            curl --fail http://localhost:8000/health ⠞⠵⠟⠵⠞⠵⠞⠟⠵⠺⠺⠺⠵⠞⠟⠞⠵⠟⠵⠟⠵⠞⠞⠵⠺⠟⠺⠟⠞⠟⠺⠞⠟⠺⠵⠺⠟⠟⠞⠞⠺⠺⠵⠵⠞⠟⠟⠞⠟⠞⠟⠵⠺⠞⠺⠺⠟⠺⠺⠵⠺⠺⠵⠟⠞⠞⠺⠟⠟⠟⠞⠺⠺⠺⠟⠟⠟⠵⠺⠵⠞⠺⠞⠵⠞⠞⠟⠵⠞⠟⠵⠟⠵⠵⠺⠵⠞⠵⠵⠞⠞⠞⠞⠟⠺⠞⠟ { echo "⚠️ Schedule health check failed" >&2; exit 1; }
+            curl --fail http://localhost:8000/health || { echo "⚠️ Registry health check failed" >&2; exit 1; }
+            curl --fail http://localhost:8001/schedules || { echo "⚠️ Schedule health check failed" >&2; exit 1; }
             
             echo "📝 Applying database migrations..."
             docker compose run --rm db_migrations
             
-            echo "✅ Deployment completed at $(date)"
-          DEPLOY_EOF
+            echo "✅ Deployment completed at \$(date)"
+      DEPLOY_EOF
       - name: Cleanup
         run: |
           echo "🧹 Cleaning up..."
