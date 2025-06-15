@@ -14,17 +14,15 @@ services:
     restart: always
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./db_migrations:/docker-entrypoint-initdb.d
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: securepass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U admin"]
       interval: 5s
       timeout: 5s
       retries: 5
-    ports: [ "5432:5432" ]
 
   app_registry:
     image: ${IMAGE_OWNER}/app_registry:latest
@@ -36,9 +34,10 @@ services:
       DB_PORT: 5432
       DB_NAME: hospital
       DB_USER: admin
-      DB_PASSWORD: securepass
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     restart: always
-    ports: [ "8000:8000" ]
+    ports:
+      - "8000:8000"
 
   app_schedule:
     image: ${IMAGE_OWNER}/app_schedule:latest
@@ -50,9 +49,10 @@ services:
       DB_PORT: 5432
       DB_NAME: hospital
       DB_USER: admin
-      DB_PASSWORD: securepass
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
     restart: always
-    ports: [ "8001:8000" ]
+    ports:
+      - "8001:8000"
 
   db_migrations:
     image: ${IMAGE_OWNER}/db_migrations:latest
@@ -64,4 +64,4 @@ services:
       DB_PORT: 5432
       DB_NAME: hospital
       DB_USER: admin
-      DB_PASSWORD: securepass
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
