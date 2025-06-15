@@ -2,6 +2,10 @@ from flask import Flask, jsonify, request
 import psycopg2
 import os
 from datetime import datetime
+from prometheus_flask_exporter import PrometheusMetrics
+
+# После создания app
+metrics = PrometheusMetrics(app)
 
 app = Flask(__name__)
 
@@ -18,6 +22,10 @@ def get_db_connection():
         user=DB_USER,
         password=DB_PASSWORD
     )
+# Добавьте healthcheck метрику
+@app.route('/metrics')
+def metrics_endpoint():
+    return metrics.generate_metrics()
 
 @app.route("/health")
 def health():
