@@ -1,0 +1,29 @@
+{
+  "title": "Hospital System Monitoring",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "HTTP Requests",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+      "targets": [{
+        "expr": "sum(rate(http_request_duration_seconds_count[5m])) by (job)",
+        "legendFormat": "{{job}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU & Memory",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "process_cpu_seconds_total",
+          "legendFormat": "CPU"
+        },
+        {
+          "expr": "process_resident_memory_bytes",
+          "legendFormat": "Memory"
+        }
+      ]
+    }
+  ]
+}
