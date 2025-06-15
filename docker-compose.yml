@@ -1,23 +1,24 @@
-# УДАЛИТЬ ЭТУ СТРОКУ: version: "3.8"
-
 volumes:
-  pg_data:  # Используем стандартный Docker volume
+  pg_data:
 
 services:
   postgres:
     image: postgres:14
     restart: always
     volumes:
-      - pg_data:/var/lib/postgresql/data  # Используем именованный том
+      - pg_data:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U admin -d hospital"]
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    ports:
+      - "5432:5432"
 
   app_registry:
     image: ${IMAGE_OWNER}/app_registry:latest
@@ -48,7 +49,7 @@ services:
     restart: always
     ports:
       - "8001:8000"
-
+      
   db_migrations:
     image: ${IMAGE_OWNER}/db_migrations:latest
     depends_on:
