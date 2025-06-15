@@ -125,7 +125,7 @@ jobs:
             set -e
             cd /opt/hospital
             
-            # Используем пароль из секретов для sudo
+            # Используем пароль из секретов 
             SUDO_PASSWORD='${{ secrets.SUDO_PASSWORD }}'
             
             # Создаем каталоги для Grafana
