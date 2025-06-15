@@ -1,53 +1,187 @@
-name: Build and Push Docker Images
+name: Hospital System CI/CD
 
-# срабатывает на пуш в любую ветку
 on:
   push:
-    branches:
-      - '**'
+    branches: [notmain]
+  workflow_dispatch:
+
+env:
+  IMAGE_OWNER: ${{ secrets.DOCKERHUB_USERNAME }}
+  SHORT_SHA: ${{ github.sha }}
+  SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        include:
+          - service: app_registry
+            context: ./app_registry
+          - service: app_schedule
+            context: ./app_schedule
+          - service: db_migrations
+            context: ./db_migrations
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up QEMU (для кросс-платформенной сборки)
-        uses: docker/setup-qemu-action@v2
+        uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # Сборка и пуш каждого сервиса
-      - name: Build & Push registratura
-        uses: docker/build-push-action@v4
+      - name: Build & push ${{ matrix.service }}
+        uses: docker/build-push-action@v5
         with:
-          context: ./registratura
-          file: registratura/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/registratura:latest
+          tags: |
+            ${{ env.IMAGE_OWNER }}/${{ matrix.service }}:latest
+            ${{ env.IMAGE_OWNER }}/${{ matrix.service }}:${{ env.SHORT_SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Build & Push schedule
-        uses: docker/build-push-action@v4
-        with:
-          context: ./schedule
-          file: schedule/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/schedule:latest
+  deploy:
+    needs: build
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 15
 
-      - name: Build & Push postgres
-        uses: docker/build-push-action@v4
-        with:
-          context: ./postgres
-          file: postgres/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/postgres:latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Verify server accessibility
+        run: |
+          echo "🔍 Checking server ${{ secrets.SSH_HOST }}:$SSH_PORT..."
+          if nc -z -w 10 "${{ secrets.SSH_HOST }}" "$SSH_PORT"; then
+            echo "✅ Server is reachable on port $SSH_PORT"
+          else
+            echo "❌ ERROR: Server ${{ secrets.SSH_HOST }}:$SSH_PORT unreachable"
+            echo "Possible reasons:"
+            echo "1. Incorrect SSH_HOST in secrets"
+            echo "2. Firewall blocking port $SSH_PORT"
+            echo "3. Server offline"
+            echo "4. Network issues"
+            exit 1
+          fi
+
+      - name: Prepare SSH environment
+        run: |
+          echo "🚀 Starting SSH preparation..."
+          
+          # Create private key file securely
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > key.pem
+          chmod 600 key.pem
+          
+          # Generate known_hosts with error handling
+          echo "🔑 Running ssh-keyscan..."
+          ssh-keyscan -p "$SSH_PORT" -H "${{ secrets.SSH_HOST }}" > known_hosts 2>/dev/null || true
+          
+          # Test SSH connection
+          echo "🧪 Testing SSH connection..."
+          ssh -i key.pem \
+              -p "$SSH_PORT" \
+              -o UserKnownHostsFile=known_hosts \
+              -o StrictHostKeyChecking=no \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+              "echo '✅ SSH successful! Host: \$(hostname)'"
+
+      - name: Copy configuration to server
+        run: |
+          echo "📤 Copying files to server..."
+          scp -i key.pem \
+              -P "$SSH_PORT" \
+              -o UserKnownHostsFile=known_hosts \
+              -o StrictHostKeyChecking=no \
+            docker-compose.yml \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
+          
+          scp -i key.pem \
+              -P "$SSH_PORT" \
+              -o UserKnownHostsFile=known_hosts \
+              -o StrictHostKeyChecking=no \
+            .env \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
+          
+          echo "✅ Files copied successfully"
+
+      - name: Deploy application stack
+        run: |
+          echo "🚀 Starting deployment..."
+          ssh -i key.pem \
+              -p "$SSH_PORT" \
+              -o UserKnownHostsFile=known_hosts \
+              -o StrictHostKeyChecking=no \
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
+            set -e
+            cd /opt/hospital
+            
+            # Удаляем старый том для чистого запуска
+            docker volume rm -f hospital_pg_data 2>/dev/null || true
+            
+            echo "⬇️ Pulling new images..."
+            docker compose pull
+            
+            echo "🔄 Restarting containers..."
+            docker compose down --remove-orphans --timeout 60
+            docker compose up -d --wait postgres app_registry app_schedule
+            
+            echo "⏳ Waiting for PostgreSQL initialization..."
+            # Ждем пока PostgreSQL станет доступен
+            for i in {1..30}; do
+              if docker compose exec postgres pg_isready -U admin; then
+                echo "✅ PostgreSQL is ready!"
+                break
+              fi
+              echo "⏱ Waiting for PostgreSQL ($i/30)..."
+              sleep 2
+            done
+            
+            # Проверяем статус PostgreSQL
+            if ! docker compose exec postgres pg_isready -U admin; then
+              echo "❌ ERROR: PostgreSQL failed to start"
+              docker compose logs postgres
+              exit 1
+            fi
+            
+            echo "⏳ Waiting for services to initialize..."
+            sleep 10
+            
+            echo "🩺 Performing health checks..."
+            # Проверяем сервис реестра
+            if curl -sSf http://localhost:8000/health; then
+              echo "✅ Registry health check passed"
+            else
+              echo "❌ Registry health check failed"
+              docker compose logs app_registry
+              exit 1
+            fi
+            
+            # Проверяем сервис расписаний
+            if curl -sSf http://localhost:8001/schedules; then
+              echo "✅ Schedule health check passed"
+            else
+              echo "❌ Schedule health check failed"
+              docker compose logs app_schedule
+              exit 1
+            fi
+            
+            echo "📝 Applying database migrations..."
+            docker compose run --rm db_migrations
+            
+            echo "✅ Deployment completed at $(date)"
+          DEPLOY_EOF
+
+      - name: Cleanup
+        run: |
+          echo "🧹 Cleaning up..."
+          rm -f key.pem known_hosts
+          echo "✅ Cleanup done"

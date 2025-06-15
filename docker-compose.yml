@@ -1,38 +1,62 @@
-version: '3.8'
+# УДАЛИТЬ ЭТУ СТРОКУ: version: "3.8"
+
+volumes:
+  pg_data:  # Используем стандартный Docker
 
 services:
   postgres:
-    image: postgres:15
-    container_name: lab5_postgres
-    env_file: .env
+    image: postgres:14
+    restart: always
     volumes:
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "5432:5432"
-
-  registratura:
-    build: ./registratura
-    container_name: registratura
-    depends_on:
-      - postgres
-    env_file: .env
-    ports:
-      - "5001:5000"
-
-  schedule:
-    build: ./schedule
-    container_name: schedule
-    depends_on:
-      - postgres
-    env_file: .env
-    ports:
-      - "5002:5000"
-
-  migrate:
-    image: yourhub/registratura:latest
-    depends_on:
-      - db
-    entrypoint: ["alembic", "upgrade", "head"]
+      - pg_data:/var/lib/postgresql/data  # Используем именованном
     environment:
-      DB_HOST: db
+      POSTGRES_DB: hospital
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app_registry:
+    image: ${IMAGE_OWNER}/app_registry:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
       DB_PORT: 5432
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    restart: always
+    ports:
+      - "8000:8000"
+
+  app_schedule:
+    image: ${IMAGE_OWNER}/app_schedule:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+    restart: always
+    ports:
+      - "8001:8000"
+
+  db_migrations:
+    image: ${IMAGE_OWNER}/db_migrations:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
