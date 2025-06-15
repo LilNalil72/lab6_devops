@@ -111,11 +111,8 @@ jobs:
               -P "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
-            grafana-datasources \
-            grafana-dashboards \
+            grafana-config \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
-          
-          echo "✅ Files copied successfully"
 
       - name: Deploy application stack
         run: |
@@ -128,15 +125,18 @@ jobs:
             set -e
             cd /opt/hospital
             
-            # Create required directories and set permissions
-            echo "🛠 Creating required directories and setting permissions..."
-            sudo mkdir -p db_data grafana-datasources grafana-dashboards
-            sudo chown -R 999:999 db_data
-            sudo chmod -R 775 db_data
-            sudo chown -R 472:472 grafana-datasources grafana-dashboards
-            sudo chmod -R 775 grafana-datasources grafana-dashboards
+            # Используем пароль из секретов для sudo
+            SUDO_PASSWORD='${{ secrets.SUDO_PASSWORD }}'
             
-            # Remove old volume if exists
+            # Создаем необходимые каталоги и устанавливаем права
+            echo "🛠 Creating required directories and setting permissions..."
+            echo "$SUDO_PASSWORD" | sudo -S mkdir -p db_data grafana-config/datasources grafana-config/dashboards 2>/dev/null
+            echo "$SUDO_PASSWORD" | sudo -S chown -R 999:999 db_data 2>/dev/null
+            echo "$SUDO_PASSWORD" | sudo -S chmod -R 775 db_data 2>/dev/null
+            echo "$SUDO_PASSWORD" | sudo -S chown -R 472:472 grafana-config/datasources grafana-config/dashboards 2>/dev/null
+            echo "$SUDO_PASSWORD" | sudo -S chmod -R 775 grafana-config/datasources grafana-config/dashboards 2>/dev/null
+            
+            # Удаляем старый том для чистого запуска
             docker volume rm -f hospital_pg_data 2>/dev/null || true
             
             echo "⬇️ Pulling new images..."
