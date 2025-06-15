@@ -106,7 +106,7 @@ jobs:
             prometheus.yml \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
           
-          # Копируем Grafana конфиги
+          # Copy Grafana configs
           scp -r -i key.pem \
               -P "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
@@ -124,11 +124,19 @@ jobs:
               -p "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
-              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
             set -e
             cd /opt/hospital
             
-            # Удаляем старый том для чистого запуска
+            # Create required directories and set permissions
+            echo "🛠 Creating required directories and setting permissions..."
+            sudo mkdir -p db_data grafana-datasources grafana-dashboards
+            sudo chown -R 999:999 db_data
+            sudo chmod -R 775 db_data
+            sudo chown -R 472:472 grafana-datasources grafana-dashboards
+            sudo chmod -R 775 grafana-datasources grafana-dashboards
+            
+            # Remove old volume if exists
             docker volume rm -f hospital_pg_data 2>/dev/null || true
             
             echo "⬇️ Pulling new images..."
@@ -136,12 +144,9 @@ jobs:
             
             echo "🔄 Restarting containers..."
             docker compose down --remove-orphans --timeout 60
-            
-            # Запускаем основные сервисы и сервисы мониторинга
             docker compose up -d --wait postgres app_registry app_schedule prometheus grafana
             
             echo "⏳ Waiting for PostgreSQL initialization..."
-            # Ждем пока PostgreSQL станет доступен
             for i in {1..30}; do
               if docker compose exec postgres pg_isready -U admin; then
                 echo "✅ PostgreSQL is ready!"
@@ -151,7 +156,6 @@ jobs:
               sleep 2
             done
             
-            # Проверяем статус PostgreSQL
             if ! docker compose exec postgres pg_isready -U admin; then
               echo "❌ ERROR: PostgreSQL failed to start"
               docker compose logs postgres
@@ -162,7 +166,7 @@ jobs:
             sleep 15
             
             echo "🩺 Performing health checks..."
-            # Проверяем сервис реестра
+            # Registry service
             if curl -sSf http://localhost:8000/health; then
               echo "✅ Registry health check passed"
             else
@@ -171,7 +175,7 @@ jobs:
               exit 1
             fi
             
-            # Проверяем сервис расписаний
+            # Schedule service
             if curl -sSf http://localhost:8001/schedules; then
               echo "✅ Schedule health check passed"
             else
@@ -180,7 +184,7 @@ jobs:
               exit 1
             fi
             
-            # Проверяем Prometheus
+            # Prometheus
             if curl -sSf http://localhost:9090/-/ready; then
               echo "✅ Prometheus health check passed"
             else
@@ -189,7 +193,7 @@ jobs:
               exit 1
             fi
             
-            # Проверяем Grafana
+            # Grafana
             if curl -sSf http://localhost:3000/api/health; then
               echo "✅ Grafana health check passed"
             else
@@ -202,8 +206,8 @@ jobs:
             docker compose run --rm db_migrations
             
             echo "✅ Deployment completed at $(date)"
-            echo "Grafana dashboard available at: http://$(hostname -I | awk '{print $1}'):3000"
-            echo "Prometheus available at: http://$(hostname -I | awk '{print $1}'):9090"
+            echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000 (admin/grafana)"
+            echo "Prometheus: http://$(hostname -I | awk '{print $1}'):9090"
           DEPLOY_EOF
 
       - name: Cleanup

@@ -4,10 +4,9 @@ import os
 from datetime import datetime
 from prometheus_flask_exporter import PrometheusMetrics
 
-# После создания app
-metrics = PrometheusMetrics(app)
-
 app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
 
 # Database connection settings
 DB_HOST = os.getenv("DB_HOST", "localhost")
@@ -22,10 +21,6 @@ def get_db_connection():
         user=DB_USER,
         password=DB_PASSWORD
     )
-# Добавьте healthcheck метрику
-@app.route('/metrics')
-def metrics_endpoint():
-    return metrics.generate_metrics()
 
 @app.route("/health")
 def health():

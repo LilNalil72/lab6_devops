@@ -1,20 +1,14 @@
 version: "3.8"
 
 volumes:
-  pg_data:
-    driver: local
-    driver_opts:
-      type: none
-      device: ./db_data
-      o: bind
-  grafana_data:  # Добавлен том для Grafana
+  grafana_data:
 
 services:
   postgres:
     image: postgres:14
     restart: always
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - ./db_data:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: hospital
       POSTGRES_USER: admin

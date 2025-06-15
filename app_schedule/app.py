@@ -2,10 +2,9 @@ from flask import Flask, jsonify, request
 import psycopg2, os
 from prometheus_flask_exporter import PrometheusMetrics
 
-# После создания app
-metrics = PrometheusMetrics(app)
-
 app = Flask(__name__)
+
+metrics = PrometheusMetrics(app)
 
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "hospital")
@@ -16,12 +15,6 @@ def get_db_connection():
     return psycopg2.connect(
         host=DB_HOST, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
     )
-
-
-# Добавьте healthcheck метрику
-@app.route('/metrics')
-def metrics_endpoint():
-    return metrics.generate_metrics()
 
 @app.route("/schedules", methods=["GET"])
 def get_schedules():
