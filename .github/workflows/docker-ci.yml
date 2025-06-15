@@ -102,17 +102,16 @@ jobs:
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
             docker-compose.yml \
-            .env \
-            prometheus.yml \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
           
-          # Copy Grafana configs
-          scp -r -i key.pem \
+          scp -i key.pem \
               -P "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
-            grafana-config \
+            .env \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/hospital/
+          
+          echo "✅ Files copied successfully"
 
       - name: Deploy application stack
         run: |
@@ -121,18 +120,9 @@ jobs:
               -p "$SSH_PORT" \
               -o UserKnownHostsFile=known_hosts \
               -o StrictHostKeyChecking=no \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
+              ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'DEPLOY_EOF'
             set -e
             cd /opt/hospital
-            
-            # Используем пароль из секретов 
-            SUDO_PASSWORD='${{ secrets.SUDO_PASSWORD }}'
-            
-            # Создаем каталоги для Grafana
-            echo "🛠 Creating Grafana directories..."
-            echo "$SUDO_PASSWORD" | sudo -S mkdir -p grafana-config/datasources grafana-config/dashboards 2>/dev/null
-            echo "$SUDO_PASSWORD" | sudo -S chown -R 472:472 grafana-config/datasources grafana-config/dashboards 2>/dev/null
-            echo "$SUDO_PASSWORD" | sudo -S chmod -R 775 grafana-config/datasources grafana-config/dashboards 2>/dev/null
             
             # Удаляем старый том для чистого запуска
             docker volume rm -f hospital_pg_data 2>/dev/null || true
@@ -142,9 +132,10 @@ jobs:
             
             echo "🔄 Restarting containers..."
             docker compose down --remove-orphans --timeout 60
-            docker compose up -d --wait postgres app_registry app_schedule prometheus grafana
+            docker compose up -d --wait postgres app_registry app_schedule
             
             echo "⏳ Waiting for PostgreSQL initialization..."
+            # Ждем пока PostgreSQL станет доступен
             for i in {1..30}; do
               if docker compose exec postgres pg_isready -U admin; then
                 echo "✅ PostgreSQL is ready!"
@@ -154,6 +145,7 @@ jobs:
               sleep 2
             done
             
+            # Проверяем статус PostgreSQL
             if ! docker compose exec postgres pg_isready -U admin; then
               echo "❌ ERROR: PostgreSQL failed to start"
               docker compose logs postgres
@@ -161,10 +153,10 @@ jobs:
             fi
             
             echo "⏳ Waiting for services to initialize..."
-            sleep 15
+            sleep 10
             
             echo "🩺 Performing health checks..."
-            # Registry service
+            # Проверяем сервис реестра
             if curl -sSf http://localhost:8000/health; then
               echo "✅ Registry health check passed"
             else
@@ -173,7 +165,7 @@ jobs:
               exit 1
             fi
             
-            # Schedule service
+            # Проверяем сервис расписаний
             if curl -sSf http://localhost:8001/schedules; then
               echo "✅ Schedule health check passed"
             else
@@ -182,30 +174,10 @@ jobs:
               exit 1
             fi
             
-            # Prometheus
-            if curl -sSf http://localhost:9090/-/ready; then
-              echo "✅ Prometheus health check passed"
-            else
-              echo "❌ Prometheus health check failed"
-              docker compose logs prometheus
-              exit 1
-            fi
-            
-            # Grafana
-            if curl -sSf http://localhost:3000/api/health; then
-              echo "✅ Grafana health check passed"
-            else
-              echo "❌ Grafana health check failed"
-              docker compose logs grafana
-              exit 1
-            fi
-            
             echo "📝 Applying database migrations..."
             docker compose run --rm db_migrations
             
             echo "✅ Deployment completed at $(date)"
-            echo "Grafana: http://$(hostname -I | awk '{print $1}'):3000 (admin/grafana)"
-            echo "Prometheus: http://$(hostname -I | awk '{print $1}'):9090"
           DEPLOY_EOF
 
       - name: Cleanup
