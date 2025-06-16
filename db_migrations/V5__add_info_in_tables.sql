@@ -1,5 +1,5 @@
 INSERT INTO doctors (full_name, specialization)
-VALUES ('Горда Сергей Романович', 'Уролог'
+VALUES ('Горда Сергей Романович', 'Педиатр'
 
 INSERT INTO patients (full_name, policy_number)
 VALUES ('Сидорова Мария Ивановна', '1234567890');
